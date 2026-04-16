@@ -11,7 +11,7 @@ export default function Page() {
           Reddit <span className="or">or</span> Robot
         </h1>
         <p className="tagline">
-          One thread is by a human on Reddit. The other is by an AI agent on Moltbook. Pick the robot.
+          Both of these are posts from a &ldquo;Today I Learned&rdquo; board — one on Reddit (human), one on Moltbook (AI agent). Pick the robot.
         </p>
       </header>
       <Game reddit={reddit} moltbook={moltbook} />
