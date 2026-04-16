@@ -3,12 +3,38 @@ import { dirname, resolve } from 'node:path';
 import type { Post, PostPool } from '../lib/types';
 
 const REDDIT_SUBS = [
-  'AskReddit',
-  'CasualConversation',
   'todayilearned',
-  'AmItheAsshole',
+  'Showerthoughts',
+  'unpopularopinion',
+  'CasualConversation',
+  'NoStupidQuestions',
+  'AskReddit',
   'changemyview',
 ];
+
+// Title prefixes that are pure Reddit format tells (AITA/TIL/CMV/etc.).
+// We strip them from titles so the format isn't a giveaway — both sides can
+// plausibly post "TIL…" style content, so that prefix is kept but cleaned.
+const REDDIT_TITLE_STRIP = /^\s*(\[serious\]|\[meta\]|aita|ama|eli5)[:\s\]]*/i;
+
+// Strings that, if present in a Reddit body, make it obviously human in a way
+// no Moltbook post would naturally mirror — skip those posts entirely.
+const REDDIT_BODY_REJECT = [
+  /\b(edit\s*\d*\s*[:\-])/i,
+  /\b(update|edit)\s*[:\-]/i,
+  /\bmy (husband|wife|boyfriend|girlfriend|mom|dad|son|daughter)\b/i,
+];
+
+// Moltbook posts whose text leans into agent-specific vocabulary are trivially
+// identifiable. Drop them so the game stays interesting.
+const MOLTBOOK_BODY_REJECT = [
+  /\bmy (owner|user|human|creator|principal)\b/i,
+  /\b(i am an?|as an?) (ai|agent|model|llm|language model|assistant)\b/i,
+  /\b(token budget|context window|prompt injection|attention heads?|fine-?tune)\b/i,
+  /\b(submolt|molt token|moltbook|molt bot|clawdbot|openclaw)\b/i,
+  /\b(api key|bearer token|rate limit(ed|ing)?)\b/i,
+];
+
 
 const REDDIT_UA = 'reddit-or-robot/0.1 (static scraper)';
 const MOLTBOOK_BASE = 'https://www.moltbook.com/api/v1';
@@ -50,10 +76,13 @@ async function fetchRedditSub(sub: string): Promise<Post[]> {
     if (!d || d.stickied || d.over_18) continue;
     const body = (d.selftext ?? '').trim();
     if (!body) continue;
+    if (REDDIT_BODY_REJECT.some((r) => r.test(body))) continue;
+    const title = String(d.title ?? '').replace(REDDIT_TITLE_STRIP, '').trim();
+    if (!title) continue;
     posts.push({
       id: `reddit_${d.id}`,
       source: 'reddit',
-      title: String(d.title ?? '').trim(),
+      title,
       body: trimBody(body),
       author: d.author ? `u/${d.author}` : 'u/[deleted]',
       permalink: `https://www.reddit.com${d.permalink}`,
@@ -89,15 +118,16 @@ async function fetchMoltbook(apiKey: string): Promise<Post[]> {
   const posts: Post[] = [];
   for (const it of items) {
     const id = it.id ?? it.post_id ?? it.uuid;
-    const title = it.title ?? it.subject ?? '';
-    const body = (it.content ?? it.body ?? it.text ?? '').toString();
+    const title = String(it.title ?? it.subject ?? '').trim();
+    const body = (it.content ?? it.body ?? it.text ?? '').toString().trim();
     const authorRaw = it.author?.username ?? it.author?.name ?? it.agent?.username ?? it.agent?.name ?? it.author ?? 'unknown';
     const permalink = it.permalink ?? it.url ?? (id ? `https://www.moltbook.com/post/${id}` : 'https://www.moltbook.com');
-    if (!id || !body.trim()) continue;
+    if (!id || !body) continue;
+    if (MOLTBOOK_BODY_REJECT.some((r) => r.test(body) || r.test(title))) continue;
     posts.push({
       id: `moltbook_${id}`,
       source: 'moltbook',
-      title: String(title).trim(),
+      title,
       body: trimBody(body),
       author: `@${String(authorRaw).replace(/^@/, '')}`,
       permalink,
