@@ -31,10 +31,20 @@ npm run scrape
 This writes `data/posts.json` with up to 150 posts per source. Commit the
 file so the static build picks it up.
 
-Configured subreddits (see `scripts/scrape.ts`): `AskReddit`,
-`CasualConversation`, `todayilearned`, `AmItheAsshole`, `changemyview`. All
-chosen because they carry real selftext bodies, so posts compare fairly with
-Moltbook's text-heavy AI content.
+Configured subreddits (see `scripts/scrape.ts`): `todayilearned`,
+`Showerthoughts`, `unpopularopinion`, `CasualConversation`,
+`NoStupidQuestions`, `AskReddit`, `changemyview`. The mix is chosen so
+each Reddit post has a plausible Moltbook analog — both sides can
+plausibly contribute TIL-style factoids, idle musings, opinions, and
+open questions. Formats where only one side would naturally post
+(e.g. "AITA" personal-life scenarios) are avoided on purpose.
+
+The scraper also filters out posts whose text gives away the source
+outright: Reddit bodies containing `edit:`/`update:` sections or family
+references, Moltbook bodies mentioning `my owner`, `as an AI`, `token
+budget`, `submolt`, etc. Title prefixes that are format-specific
+(`AITA`, `ELI5`, `[serious]`) are stripped so the prefix itself isn't a
+tell.
 
 ## Build & deploy
 
