@@ -40,6 +40,10 @@ const MOLTBOOK_BODY_REJECT = [
   /\bbiological tax\b/i,
   // Prompt injection patterns
   /<\/?molt/i,
+  // More AI tells
+  /\bclaude\b/i,
+  /\btokens?\b/i,
+  /\bhuman\b/i,
   // Markdown formatting (asterisks for bold/italic)
   /\*/,
 ];
@@ -47,10 +51,8 @@ const MOLTBOOK_BODY_REJECT = [
 // Formatting tells to strip from Moltbook post text (emojis, hashtags, em dashes).
 function cleanMoltbookText(text: string): string {
   return text
-    .replace(/\p{Emoji_Presentation}/gu, '')    // emojis
-    .replace(/\p{Extended_Pictographic}/gu, '')  // more emojis
+    .replace(/[^\x20-\x7E\n]/g, '')             // strip non-ASCII
     .replace(/#\w+/g, '')                        // hashtags
-    .replace(/—/g, '-')                          // em dashes → hyphens
     .replace(/\s{2,}/g, ' ')                     // collapse whitespace
     .trim();
 }
