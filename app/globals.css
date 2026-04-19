@@ -117,6 +117,12 @@ main {
   cursor: default;
 }
 
+.card .card-board {
+  font-size: 0.75rem;
+  color: var(--ink-dim);
+  letter-spacing: 0.03em;
+}
+
 .card .card-title {
   margin: 0;
   font-size: 1.05rem;

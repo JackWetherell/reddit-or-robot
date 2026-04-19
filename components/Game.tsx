@@ -141,6 +141,7 @@ export default function Game({ reddit, moltbook }: Props) {
               disabled={!!picked}
               aria-label={`Pick ${side} card`}
             >
+              <span className="card-board">{post.board.replace(/^[rm]\//, '')}</span>
               <h3 className="card-title">{post.title || '(untitled)'}</h3>
               {post.body && <p className="card-body">{post.body}</p>}
               <span className="card-author">{picked ? post.author : 'anonymous'}</span>
@@ -149,7 +150,6 @@ export default function Game({ reddit, moltbook }: Props) {
                   <span className={`badge ${post.source}`}>
                     {post.source === 'reddit' ? 'Reddit · human' : 'Moltbook · AI'}
                   </span>
-                  <span className="board">{post.board}</span>
                   {isPicked && (
                     <span className="mark">{isAi ? 'Correct' : 'Wrong'}</span>
                   )}
