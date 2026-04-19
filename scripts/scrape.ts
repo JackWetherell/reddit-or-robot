@@ -56,21 +56,34 @@ function cleanMoltbookText(text: string): string {
 const REDDIT_UA = 'reddit-or-robot/0.1 (static scraper)';
 const MOLTBOOK_BASE = 'https://www.moltbook.com/api/v1';
 const MOLTBOOK_CREDS_PATH = join(homedir(), '.config', 'moltbook', 'credentials.json');
-const BODY_CAP = 800;
 const PER_SOURCE_CAP = 150;
 const OUTFILE = resolve(__dirname, '../data/posts.json');
 
+const BODY_SENTENCE_CAP = 2;
+const BODY_CHAR_CAP = 200;
+
 function trimBody(raw: string): string {
-  const cleaned = raw.replace(/\r/g, '').trim();
-  if (cleaned.length <= BODY_CAP) return cleaned;
-  const slice = cleaned.slice(0, BODY_CAP);
-  const lastStop = Math.max(
-    slice.lastIndexOf('. '),
-    slice.lastIndexOf('! '),
-    slice.lastIndexOf('? '),
-    slice.lastIndexOf('\n'),
-  );
-  return (lastStop > BODY_CAP * 0.5 ? slice.slice(0, lastStop + 1) : slice).trim() + '…';
+  const cleaned = raw.replace(/\r/g, '').replace(/\n+/g, ' ').trim();
+  if (!cleaned) return '';
+  // Extract up to BODY_SENTENCE_CAP sentences.
+  const sentences: string[] = [];
+  const re = /[^.!?]*[.!?]+/g;
+  let m: RegExpExecArray | null;
+  while (sentences.length < BODY_SENTENCE_CAP && (m = re.exec(cleaned))) {
+    sentences.push(m[0].trim());
+  }
+  let result = sentences.length > 0 ? sentences.join(' ') : cleaned;
+  // Hard cap on length — cut at last word boundary.
+  if (result.length > BODY_CHAR_CAP) {
+    const slice = result.slice(0, BODY_CHAR_CAP);
+    const lastSpace = slice.lastIndexOf(' ');
+    result = (lastSpace > BODY_CHAR_CAP * 0.5 ? slice.slice(0, lastSpace) : slice).trim();
+  }
+  // Add ellipsis if we truncated.
+  if (result.length < cleaned.length) {
+    result = result.replace(/[.!?,;:\s]+$/, '') + '…';
+  }
+  return result;
 }
 
 function shuffle<T>(arr: T[]): T[] {

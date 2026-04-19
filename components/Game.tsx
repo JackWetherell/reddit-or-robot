@@ -142,6 +142,7 @@ export default function Game({ reddit, moltbook }: Props) {
               aria-label={`Pick ${side} card`}
             >
               <h3 className="card-title">{post.title || '(untitled)'}</h3>
+              {post.body && <p className="card-body">{post.body}</p>}
               <span className="card-author">{picked ? post.author : 'anonymous'}</span>
               {picked && (
                 <span className="reveal">
