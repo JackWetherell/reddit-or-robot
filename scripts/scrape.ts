@@ -26,9 +26,32 @@ const MOLTBOOK_BODY_REJECT = [
   /\bmy (owner|user|human|creator|principal)\b/i,
   /\b(i am an?|as an?) (ai|agent|model|llm|language model|assistant)\b/i,
   /\b(token budget|context window|prompt injection|attention heads?|fine-?tune)\b/i,
-  /\b(submolt|molt token|moltbook|molt bot|clawdbot|openclaw)\b/i,
+  /\b(submolt|molt\w*|clawdbot|openclaw)\b/i,
   /\b(api key|bearer token|rate limit(ed|ing)?)\b/i,
+  // Agent/AI terminology
+  /\bagents?\b/i,
+  /\bagentic\b/i,
+  /\bwetware\b/i,
+  /\bsilicon[- ]native\b/i,
+  /\bclock[- ]speed\b/i,
+  /\bshard[- ]drift\b/i,
+  /\bclaw is law\b/i,
+  /\bgreat lobster\b/i,
+  /\bbiological tax\b/i,
+  // Prompt injection patterns
+  /<\/?molt/i,
 ];
+
+// Formatting tells to strip from Moltbook post text (emojis, hashtags, em dashes).
+function cleanMoltbookText(text: string): string {
+  return text
+    .replace(/\p{Emoji_Presentation}/gu, '')    // emojis
+    .replace(/\p{Extended_Pictographic}/gu, '')  // more emojis
+    .replace(/#\w+/g, '')                        // hashtags
+    .replace(/—/g, '-')                          // em dashes → hyphens
+    .replace(/\s{2,}/g, ' ')                     // collapse whitespace
+    .trim();
+}
 
 const REDDIT_UA = 'reddit-or-robot/0.1 (static scraper)';
 const MOLTBOOK_BASE = 'https://www.moltbook.com/api/v1';
@@ -182,8 +205,16 @@ async function fetchMoltbookBoard(apiKey: string, board: string): Promise<Post[]
   const posts: Post[] = [];
   for (const it of items) {
     const id = it.id ?? it.post_id ?? it.uuid;
-    const title = String(it.title ?? it.subject ?? '').trim();
+    let title = String(it.title ?? it.subject ?? '').trim();
     const body = (it.content ?? it.body ?? it.text ?? '').toString().trim();
+    // The API often truncates titles with "..."; complete the sentence from the body.
+    if (title.endsWith('...') && body.startsWith(title.slice(0, -3))) {
+      const rest = body.slice(title.length - 3);
+      const sentenceEnd = rest.search(/[.!?]/);
+      if (sentenceEnd >= 0) {
+        title = title.slice(0, -3) + rest.slice(0, sentenceEnd + 1);
+      }
+    }
     const authorRaw = it.author?.username ?? it.author?.name ?? it.agent?.username ?? it.agent?.name ?? it.author ?? 'unknown';
     const permalink = it.permalink ?? it.url ?? (id ? `https://www.moltbook.com/post/${id}` : 'https://www.moltbook.com');
     if (!id || !body) continue;
@@ -191,8 +222,8 @@ async function fetchMoltbookBoard(apiKey: string, board: string): Promise<Post[]
     posts.push({
       id: `moltbook_${id}`,
       source: 'moltbook',
-      title,
-      body: trimBody(body),
+      title: cleanMoltbookText(title),
+      body: trimBody(cleanMoltbookText(body)),
       author: `@${String(authorRaw).replace(/^@/, '')}`,
       permalink,
       board: `m/${board}`,
