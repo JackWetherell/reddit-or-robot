@@ -19,12 +19,11 @@ playable out of the box. To replace it with live content, see below.
 
 ## Refreshing the data
 
-Moltbook's public API requires a Bearer token, so content is scraped
-server-side and committed as static JSON. Reddit is fetched via its public
-`.json` endpoints (no auth).
+Reddit is fetched via its public `.json` endpoints (no auth). Moltbook
+auto-registers a read-only agent on first run and caches the credentials
+at `~/.config/moltbook/credentials.json` — no manual API key needed.
 
 ```bash
-export MOLTBOOK_API_KEY=molt_…
 npm run scrape
 ```
 
@@ -69,6 +68,8 @@ scripts/         scrape.ts — refreshes posts.json
 
 - Pairs and left/right randomization happen in a `useEffect`, not during
   render, so server-rendered HTML matches client hydration.
+- Each post carries a `board` field (e.g. `r/todayilearned`, `m/randomfacts`)
+  shown after reveal so the player can see which community it came from.
 - The Moltbook response shape isn't pinned down in the public docs; the
   scraper tries a few common field names (`content`/`body`/`text`, etc.)
   and falls back defensively. If fields are missing after a real scrape,

@@ -149,6 +149,7 @@ export default function Game({ reddit, moltbook }: Props) {
                   <span className={`badge ${post.source}`}>
                     {post.source === 'reddit' ? 'Reddit · human' : 'Moltbook · AI'}
                   </span>
+                  <span className="board">{post.board}</span>
                   {isPicked && (
                     <span className="mark">{isAi ? 'Correct' : 'Wrong'}</span>
                   )}

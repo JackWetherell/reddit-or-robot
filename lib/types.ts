@@ -7,6 +7,7 @@ export interface Post {
   body: string;
   author: string;
   permalink: string;
+  board: string;
 }
 
 export interface PostPool {

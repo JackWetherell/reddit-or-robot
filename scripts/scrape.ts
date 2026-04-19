@@ -1,16 +1,11 @@
-import { writeFileSync, mkdirSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { writeFileSync, readFileSync, mkdirSync, existsSync } from 'node:fs';
+import { dirname, resolve, join } from 'node:path';
+import { homedir } from 'node:os';
 import type { Post, PostPool } from '../lib/types';
 
-const REDDIT_SUBS = [
-  'todayilearned',
-  'Showerthoughts',
-  'unpopularopinion',
-  'CasualConversation',
-  'NoStupidQuestions',
-  'AskReddit',
-  'changemyview',
-];
+const BOARDS: string[] = JSON.parse(
+  readFileSync(resolve(__dirname, '../config/boards.json'), 'utf-8'),
+);
 
 // Title prefixes that are pure Reddit format tells (AITA/TIL/CMV/etc.).
 // We strip them from titles so the format isn't a giveaway — both sides can
@@ -35,9 +30,9 @@ const MOLTBOOK_BODY_REJECT = [
   /\b(api key|bearer token|rate limit(ed|ing)?)\b/i,
 ];
 
-
 const REDDIT_UA = 'reddit-or-robot/0.1 (static scraper)';
 const MOLTBOOK_BASE = 'https://www.moltbook.com/api/v1';
+const MOLTBOOK_CREDS_PATH = join(homedir(), '.config', 'moltbook', 'credentials.json');
 const BODY_CAP = 800;
 const PER_SOURCE_CAP = 150;
 const OUTFILE = resolve(__dirname, '../data/posts.json');
@@ -64,6 +59,10 @@ function shuffle<T>(arr: T[]): T[] {
   return a;
 }
 
+// ---------------------------------------------------------------------------
+// Reddit
+// ---------------------------------------------------------------------------
+
 async function fetchRedditSub(sub: string): Promise<Post[]> {
   const url = `https://www.reddit.com/r/${sub}/top.json?limit=50&t=month`;
   const res = await fetch(url, { headers: { 'User-Agent': REDDIT_UA } });
@@ -75,10 +74,9 @@ async function fetchRedditSub(sub: string): Promise<Post[]> {
     const d = c?.data;
     if (!d || d.stickied || d.over_18) continue;
     const body = (d.selftext ?? '').trim();
-    if (!body) continue;
-    if (REDDIT_BODY_REJECT.some((r) => r.test(body))) continue;
     const title = String(d.title ?? '').replace(REDDIT_TITLE_STRIP, '').trim();
-    if (!title) continue;
+    if (!title && !body) continue;
+    if (body && REDDIT_BODY_REJECT.some((r) => r.test(body))) continue;
     posts.push({
       id: `reddit_${d.id}`,
       source: 'reddit',
@@ -86,6 +84,7 @@ async function fetchRedditSub(sub: string): Promise<Post[]> {
       body: trimBody(body),
       author: d.author ? `u/${d.author}` : 'u/[deleted]',
       permalink: `https://www.reddit.com${d.permalink}`,
+      board: `r/${sub}`,
     });
   }
   return posts;
@@ -93,28 +92,93 @@ async function fetchRedditSub(sub: string): Promise<Post[]> {
 
 async function fetchReddit(): Promise<Post[]> {
   const all: Post[] = [];
-  for (const sub of REDDIT_SUBS) {
+  for (const board of BOARDS) {
     try {
-      const posts = await fetchRedditSub(sub);
-      console.log(`  reddit r/${sub}: ${posts.length} posts`);
+      const posts = await fetchRedditSub(board);
+      console.log(`  reddit r/${board}: ${posts.length} posts`);
       all.push(...posts);
     } catch (err) {
-      console.warn(`  reddit r/${sub} failed:`, (err as Error).message);
+      console.warn(`  reddit r/${board} failed:`, (err as Error).message);
     }
   }
   return all;
 }
 
-async function fetchMoltbook(apiKey: string): Promise<Post[]> {
-  const url = `${MOLTBOOK_BASE}/feed?sort=top&limit=100`;
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${apiKey}` } });
-  if (!res.ok) throw new Error(`moltbook: ${res.status} ${res.statusText}`);
-  const json: any = await res.json();
-  // Response shape varies: try common keys.
-  const items: any[] = json?.posts ?? json?.data ?? json?.items ?? (Array.isArray(json) ? json : []);
-  if (items.length === 0) {
-    console.warn('  moltbook returned no items; raw keys:', Object.keys(json ?? {}));
+// ---------------------------------------------------------------------------
+// Moltbook — auto-register + cached credentials
+// ---------------------------------------------------------------------------
+
+interface MoltbookCreds {
+  api_key: string;
+  agent_name: string;
+}
+
+function loadCachedCreds(): MoltbookCreds | null {
+  if (!existsSync(MOLTBOOK_CREDS_PATH)) return null;
+  try {
+    const raw = readFileSync(MOLTBOOK_CREDS_PATH, 'utf-8');
+    const parsed = JSON.parse(raw);
+    if (parsed.api_key) return parsed as MoltbookCreds;
+  } catch {}
+  return null;
+}
+
+function saveCreds(creds: MoltbookCreds): void {
+  const dir = dirname(MOLTBOOK_CREDS_PATH);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(MOLTBOOK_CREDS_PATH, JSON.stringify(creds, null, 2));
+  console.log(`  saved credentials to ${MOLTBOOK_CREDS_PATH}`);
+}
+
+async function registerAgent(): Promise<MoltbookCreds> {
+  const name = `ror-scraper-${Date.now()}`;
+  const res = await fetch(`${MOLTBOOK_BASE}/agents/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name,
+      description: 'Read-only scraper for the Reddit or Robot game.',
+    }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`moltbook register failed: ${res.status} ${res.statusText} — ${text}`);
   }
+  const json: any = await res.json();
+  const agent = json.agent ?? json.data ?? json;
+  const api_key = agent.api_key ?? agent.apiKey ?? agent.token;
+  if (!api_key) throw new Error('moltbook register: no api_key in response');
+  return { api_key, agent_name: agent.name ?? name };
+}
+
+async function getMoltbookKey(): Promise<string> {
+  // 1. Check env var override (backwards compat)
+  if (process.env.MOLTBOOK_API_KEY) {
+    console.log('  using MOLTBOOK_API_KEY from environment');
+    return process.env.MOLTBOOK_API_KEY;
+  }
+  // 2. Check cached credentials
+  const cached = loadCachedCreds();
+  if (cached) {
+    console.log(`  using cached credentials (agent: ${cached.agent_name})`);
+    return cached.api_key;
+  }
+  // 3. Auto-register
+  console.log('  no credentials found — registering new agent…');
+  const creds = await registerAgent();
+  saveCreds(creds);
+  return creds.api_key;
+}
+
+async function fetchMoltbookBoard(apiKey: string, board: string): Promise<Post[]> {
+  const headers = { Authorization: `Bearer ${apiKey}` };
+  // Fetch posts filtered to this submolt
+  const url = `${MOLTBOOK_BASE}/posts?sort=top&limit=100&submolt=${encodeURIComponent(board)}`;
+  const res = await fetch(url, { headers });
+  if (!res.ok) throw new Error(`moltbook m/${board}: ${res.status} ${res.statusText}`);
+  const json: any = await res.json();
+  const raw = json?.data?.posts ?? json?.data ?? json?.posts ?? json?.items ?? (Array.isArray(json) ? json : []);
+  const items: any[] = Array.isArray(raw) ? raw : [];
   const posts: Post[] = [];
   for (const it of items) {
     const id = it.id ?? it.post_id ?? it.uuid;
@@ -131,10 +195,29 @@ async function fetchMoltbook(apiKey: string): Promise<Post[]> {
       body: trimBody(body),
       author: `@${String(authorRaw).replace(/^@/, '')}`,
       permalink,
+      board: `m/${board}`,
     });
   }
   return posts;
 }
+
+async function fetchMoltbook(apiKey: string): Promise<Post[]> {
+  const all: Post[] = [];
+  for (const board of BOARDS) {
+    try {
+      const posts = await fetchMoltbookBoard(apiKey, board);
+      console.log(`  moltbook m/${board}: ${posts.length} posts`);
+      all.push(...posts);
+    } catch (err) {
+      console.warn(`  moltbook m/${board} failed:`, (err as Error).message);
+    }
+  }
+  return all;
+}
+
+// ---------------------------------------------------------------------------
+// Main
+// ---------------------------------------------------------------------------
 
 function dedupe(posts: Post[]): Post[] {
   const seen = new Set<string>();
@@ -142,15 +225,11 @@ function dedupe(posts: Post[]): Post[] {
 }
 
 async function main() {
-  const apiKey = process.env.MOLTBOOK_API_KEY;
-  if (!apiKey) {
-    console.error('MOLTBOOK_API_KEY is not set. Export it and re-run.');
-    process.exit(1);
-  }
-
   console.log('Fetching Reddit…');
   const redditRaw = await fetchReddit();
+
   console.log('Fetching Moltbook…');
+  const apiKey = await getMoltbookKey();
   const moltRaw = await fetchMoltbook(apiKey);
 
   const reddit = shuffle(dedupe(redditRaw)).slice(0, PER_SOURCE_CAP);
