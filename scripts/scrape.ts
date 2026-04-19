@@ -115,7 +115,7 @@ async function fetchRedditSub(sub: string): Promise<Post[]> {
     if (!d || d.stickied || d.over_18) continue;
     const body = (d.selftext ?? '').trim();
     const title = String(d.title ?? '').replace(REDDIT_TITLE_STRIP, '').trim();
-    if (!title && !body) continue;
+    if (!title || !body) continue;
     if (body && REDDIT_BODY_REJECT.some((r) => r.test(body))) continue;
     posts.push({
       id: `reddit_${d.id}`,

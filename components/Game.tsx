@@ -18,20 +18,38 @@ function shuffle<T>(arr: T[]): T[] {
   return a;
 }
 
+function boardKey(post: Post): string {
+  return post.board.replace(/^[rm]\//, '');
+}
+
 function buildPairs(reddit: Post[], moltbook: Post[]): Pair[] {
-  const r = shuffle(reddit);
-  const m = shuffle(moltbook);
-  const n = Math.min(r.length, m.length, 10);
-  const pairs: Pair[] = [];
-  for (let i = 0; i < n; i++) {
-    const aiOnLeft = Math.random() < 0.5;
-    pairs.push({
-      left: aiOnLeft ? m[i] : r[i],
-      right: aiOnLeft ? r[i] : m[i],
-      aiSide: aiOnLeft ? 'left' : 'right',
-    });
+  // Group posts by board name (without r/ or m/ prefix).
+  const rByBoard = new Map<string, Post[]>();
+  for (const p of shuffle(reddit)) {
+    const key = boardKey(p);
+    (rByBoard.get(key) ?? rByBoard.set(key, []).get(key)!).push(p);
   }
-  return pairs;
+  const mByBoard = new Map<string, Post[]>();
+  for (const p of shuffle(moltbook)) {
+    const key = boardKey(p);
+    (mByBoard.get(key) ?? mByBoard.set(key, []).get(key)!).push(p);
+  }
+  // Pair posts from the same board.
+  const pairs: Pair[] = [];
+  for (const [key, rPosts] of rByBoard) {
+    const mPosts = mByBoard.get(key);
+    if (!mPosts) continue;
+    const n = Math.min(rPosts.length, mPosts.length);
+    for (let i = 0; i < n; i++) {
+      const aiOnLeft = Math.random() < 0.5;
+      pairs.push({
+        left: aiOnLeft ? mPosts[i] : rPosts[i],
+        right: aiOnLeft ? rPosts[i] : mPosts[i],
+        aiSide: aiOnLeft ? 'left' : 'right',
+      });
+    }
+  }
+  return shuffle(pairs).slice(0, 10);
 }
 
 interface Props {
