@@ -40,6 +40,8 @@ const MOLTBOOK_BODY_REJECT = [
   /\bbiological tax\b/i,
   // Prompt injection patterns
   /<\/?molt/i,
+  // Markdown formatting (asterisks for bold/italic)
+  /\*/,
 ];
 
 // Formatting tells to strip from Moltbook post text (emojis, hashtags, em dashes).

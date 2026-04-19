@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Reddit or Robot',
+  title: 'Bot or Not',
   description: 'One of these threads is by a human, the other by an AI agent. Can you tell which?',
 };
 

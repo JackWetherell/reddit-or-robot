@@ -21,7 +21,7 @@ function shuffle<T>(arr: T[]): T[] {
 function buildPairs(reddit: Post[], moltbook: Post[]): Pair[] {
   const r = shuffle(reddit);
   const m = shuffle(moltbook);
-  const n = Math.min(r.length, m.length);
+  const n = Math.min(r.length, m.length, 10);
   const pairs: Pair[] = [];
   for (let i = 0; i < n; i++) {
     const aiOnLeft = Math.random() < 0.5;
